@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VisionAI — Object Detection Studio</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface-2: #1c2128;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-glow: rgba(88, 166, 255, 0.15);
+      --success: #3fb950;
+      --error: #f85149;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+      --mono: "Cascadia Code", "Fira Code", Consolas, monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5; }
+    header {
+      border-bottom: 1px solid var(--border); background: var(--surface);
+      padding: 1rem 1.5rem; display: flex; align-items: center;
+      justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    }
+    .logo { display: flex; align-items: center; gap: 0.75rem; }
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), #a371f7);
+      border-radius: var(--radius-sm); display: flex; align-items: center;
+      justify-content: center; font-size: 1rem; font-weight: 700; color: #fff;
+    }
+    .logo h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; }
+    .logo span { font-size: 0.75rem; color: var(--text-muted); font-weight: 400; }
+    .status-pill {
+      display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem;
+      color: var(--text-muted); padding: 0.35rem 0.75rem;
+      border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2);
+    }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); transition: background 0.3s; }
+    .status-dot.online { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .status-dot.offline { background: var(--error); }
+    main { max-width: 1200px; margin: 0 auto; padding: 1.5rem; display: grid; gap: 1.25rem; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 280px; gap: 1.25rem; align-items: start; }
+    @media (max-width: 860px) { .grid-2 { grid-template-columns: 1fr; } }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .card-header {
+      padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border);
+      font-size: 0.8rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-muted);
+    }
+    .card-body { padding: 1.25rem; }
+    .dropzone {
+      border: 2px dashed var(--border); border-radius: var(--radius);
+      padding: 2.5rem 1.5rem; text-align: center; cursor: pointer;
+      transition: border-color 0.2s, background 0.2s; background: var(--surface-2); position: relative;
+    }
+    .dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: var(--accent-glow); }
+    .dropzone-icon { font-size: 2rem; margin-bottom: 0.75rem; opacity: 0.5; font-weight: 300; }
+    .dropzone h3 { font-size: 1rem; font-weight: 600; margin-bottom: 0.35rem; }
+    .dropzone p { font-size: 0.85rem; color: var(--text-muted); }
+    .dropzone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .file-info { margin-top: 0.75rem; font-size: 0.8rem; color: var(--accent); font-family: var(--mono); }
+    .controls { display: flex; flex-direction: column; gap: 1.25rem; }
+    .control-group label { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 500; margin-bottom: 0.5rem; }
+    .control-group label span { font-family: var(--mono); color: var(--accent); font-size: 0.8rem; }
+    input[type="range"] {
+      width: 100%; height: 6px; -webkit-appearance: none; appearance: none;
+      background: var(--border); border-radius: 3px; outline: none; cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--bg); cursor: pointer;
+    }
+    .btn-detect {
+      width: 100%; padding: 0.75rem 1rem;
+      background: linear-gradient(135deg, var(--accent), #4c8ed9);
+      color: #fff; border: none; border-radius: var(--radius-sm);
+      font-size: 0.95rem; font-weight: 600; cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn-detect:hover:not(:disabled) { opacity: 0.9; }
+    .btn-detect:active:not(:disabled) { transform: scale(0.98); }
+    .btn-detect:disabled { opacity: 0.45; cursor: not-allowed; }
+    .canvas-wrap {
+      position: relative; background: #000; border-radius: var(--radius-sm);
+      overflow: hidden; min-height: 200px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .canvas-wrap canvas { max-width: 100%; height: auto; display: block; }
+    .canvas-placeholder { color: var(--text-muted); font-size: 0.9rem; padding: 3rem; text-align: center; }
+    .loading-overlay {
+      position: absolute; inset: 0; background: rgba(13, 17, 23, 0.85);
+      display: none; align-items: center; justify-content: center;
+      flex-direction: column; gap: 1rem; z-index: 10;
+    }
+    .loading-overlay.active { display: flex; }
+    .spinner {
+      width: 44px; height: 44px; border: 3px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 0.85rem; color: var(--text-muted); }
+    .stats-bar {
+      display: none; grid-template-columns: repeat(4, 1fr);
+      gap: 1px; background: var(--border); border-radius: var(--radius); overflow: hidden;
+    }
+    .stats-bar.visible { display: grid; }
+    @media (max-width: 600px) { .stats-bar { grid-template-columns: repeat(2, 1fr); } }
+    .stat-item { background: var(--surface); padding: 1rem 1.25rem; text-align: center; }
+    .stat-value { font-size: 1.5rem; font-weight: 700; font-family: var(--mono); color: var(--accent); line-height: 1.2; }
+    .stat-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.2rem; }
+    .chart { display: none; }
+    .chart.visible { display: block; }
+    .bar-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.65rem; }
+    .bar-label {
+      width: 90px; font-size: 0.82rem; font-weight: 500; text-align: right;
+      flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .bar-track { flex: 1; height: 22px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; min-width: 4px; }
+    .bar-count { font-size: 0.78rem; font-family: var(--mono); color: var(--text-muted); width: 28px; text-align: right; flex-shrink: 0; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    thead th {
+      text-align: left; padding: 0.65rem 1rem; font-size: 0.72rem;
+      text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);
+      border-bottom: 1px solid var(--border); font-weight: 600;
+    }
+    tbody td { padding: 0.6rem 1rem; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 0.82rem; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: var(--surface-2); }
+    .class-badge { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--font); font-weight: 500; }
+    .class-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .conf-bar { display: inline-block; height: 4px; border-radius: 2px; vertical-align: middle; margin-left: 0.4rem; }
+    .error-banner {
+      display: none; padding: 0.85rem 1.25rem;
+      background: rgba(248, 81, 73, 0.12); border: 1px solid rgba(248, 81, 73, 0.35);
+      border-radius: var(--radius-sm); color: var(--error); font-size: 0.88rem; align-items: center; gap: 0.6rem;
+    }
+    .error-banner.visible { display: flex; }
+    .job-meta { font-size: 0.78rem; color: var(--text-muted); font-family: var(--mono); margin-top: 0.5rem; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <div class="logo-icon">V</div>
+    <div><h1>VisionAI <span>YOLOv8x Detection Studio</span></h1></div>
+  </div>
+  <div class="status-pill">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">Checking server...</span>
+  </div>
+</header>
+<main>
+  <div class="error-banner" id="errorBanner"><span>!</span><span id="errorMessage"></span></div>
+  <div class="grid-2">
+    <div style="display:flex;flex-direction:column;gap:1.25rem;">
+      <div class="card">
+        <div class="card-header">Upload Image</div>
+        <div class="card-body">
+          <div class="dropzone" id="dropzone">
+            <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp,image/jpg" />
+            <div class="dropzone-icon">+</div>
+            <h3>Drag and drop an image here</h3>
+            <p>or click to browse &middot; JPG, PNG, WEBP &middot; max 20 MB</p>
+            <div class="file-info hidden" id="fileInfo"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">Detection Result</div>
+        <div class="card-body" style="padding:0.75rem;">
+          <div class="canvas-wrap" id="canvasWrap">
+            <div class="canvas-placeholder" id="canvasPlaceholder">
+              Upload an image and click <strong>Run Detection</strong> to see results
+            </div>
+            <canvas id="canvas" class="hidden"></canvas>
+            <div class="loading-overlay" id="loadingOverlay">
+              <div class="spinner"></div>
+              <div class="loading-text">Running YOLOv8x inference...</div>
+            </div>
+          </div>
+          <div class="job-meta hidden" id="jobMeta"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">Detection Settings</div>
+      <div class="card-body">
+        <div class="controls">
+          <div class="control-group">
+            <label>Confidence Threshold <span id="confVal">0.45</span></label>
+            <input type="range" id="confSlider" min="0.1" max="0.9" step="0.05" value="0.45" />
+          </div>
+          <div class="control-group">
+            <label>IOU Threshold <span id="iouVal">0.45</span></label>
+            <input type="range" id="iouSlider" min="0.1" max="0.9" step="0.05" value="0.45" />
+          </div>
+          <button class="btn-detect" id="btnDetect" disabled>Run Detection</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-item"><div class="stat-value" id="statTotal">-</div><div class="stat-label">Total Detections</div></div>
+    <div class="stat-item"><div class="stat-value" id="statClasses">-</div><div class="stat-label">Unique Classes</div></div>
+    <div class="stat-item"><div class="stat-value" id="statConf">-</div><div class="stat-label">Avg Confidence</div></div>
+    <div class="stat-item"><div class="stat-value" id="statTime">-</div><div class="stat-label">Inference (ms)</div></div>
+  </div>
+  <div class="grid-2" id="resultsGrid" style="display:none;">
+    <div class="card chart" id="chartCard">
+      <div class="card-header">Class Distribution</div>
+      <div class="card-body" id="chartBody"></div>
+    </div>
+    <div class="card">
+      <div class="card-header">All Detections</div>
+      <div class="card-body table-wrap" style="padding:0;">
+        <table>
+          <thead><tr><th>Class</th><th>Confidence</th><th>Size (px)</th></tr></thead>
+          <tbody id="detectionsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const dropzone = $("dropzone"), fileInput = $("fileInput"), fileInfo = $("fileInfo");
+  const btnDetect = $("btnDetect"), confSlider = $("confSlider"), iouSlider = $("iouSlider");
+  const confVal = $("confVal"), iouVal = $("iouVal"), canvas = $("canvas");
+  const canvasWrap = $("canvasWrap"), canvasPlaceholder = $("canvasPlaceholder");
+  const loadingOverlay = $("loadingOverlay"), errorBanner = $("errorBanner"), errorMessage = $("errorMessage");
+  const statsBar = $("statsBar"), resultsGrid = $("resultsGrid"), chartCard = $("chartCard");
+  const chartBody = $("chartBody"), detectionsBody = $("detectionsBody"), jobMeta = $("jobMeta");
+  const statusDot = $("statusDot"), statusText = $("statusText");
+  let selectedFile = null, lastResult = null;
+  const ctx = canvas.getContext("2d");
+
+  function colorFromClass(name) {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    return "hsl(" + (Math.abs(hash) % 360) + ", 72%, 52%)";
+  }
+
+  async function checkHealth() {
+    try {
+      const res = await fetch("/health", { signal: AbortSignal.timeout(4000) });
+      if (!res.ok) throw new Error("unhealthy");
+      const data = await res.json();
+      statusDot.className = "status-dot online";
+      statusText.textContent = "Server online \u00b7 " + (data.model || "YOLOv8x");
+    } catch {
+      statusDot.className = "status-dot offline";
+      statusText.textContent = "Server offline";
+    }
+  }
+  checkHealth();
+  setInterval(checkHealth, 30000);
+
+  confSlider.addEventListener("input", () => { confVal.textContent = parseFloat(confSlider.value).toFixed(2); });
+  iouSlider.addEventListener("input", () => { iouVal.textContent = parseFloat(iouSlider.value).toFixed(2); });
+
+  function showError(msg) { errorMessage.textContent = msg; errorBanner.classList.add("visible"); }
+  function hideError() { errorBanner.classList.remove("visible"); }
+
+  function setFile(file) {
+    if (!file) return;
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+    if (!allowed.includes(file.type)) { showError("Only JPG, PNG, and WEBP images are supported."); return; }
+    if (file.size > 20 * 1024 * 1024) { showError("File exceeds the 20 MB limit."); return; }
+    hideError();
+    selectedFile = file;
+    fileInfo.textContent = file.name + " (" + (file.size / 1024).toFixed(1) + " KB)";
+    fileInfo.classList.remove("hidden");
+    btnDetect.disabled = false;
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { drawCanvas(img, []); URL.revokeObjectURL(url); };
+    img.src = url;
+  }
+
+  fileInput.addEventListener("change", (e) => { if (e.target.files[0]) setFile(e.target.files[0]); });
+  dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("dragover"); });
+  dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+  dropzone.addEventListener("drop", (e) => {
+    e.preventDefault(); dropzone.classList.remove("dragover");
+    if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+  });
+
+  function drawCanvas(img, detections, imgW, imgH) {
+    canvasPlaceholder.classList.add("hidden");
+    canvas.classList.remove("hidden");
+    const maxW = canvasWrap.clientWidth - 2;
+    const natW = imgW || img.naturalWidth, natH = imgH || img.naturalHeight;
+    const scale = Math.min(1, maxW / natW);
+    const cw = Math.round(natW * scale), ch = Math.round(natH * scale);
+    canvas.width = cw; canvas.height = ch;
+    ctx.clearRect(0, 0, cw, ch);
+    ctx.drawImage(img, 0, 0, cw, ch);
+    const sx = cw / natW, sy = ch / natH;
+    for (const det of detections) {
+      const b = det.bbox, color = colorFromClass(det.class);
+      const rx = b.x1 * sx, ry = b.y1 * sy, rw = (b.x2 - b.x1) * sx, rh = (b.y2 - b.y1) * sy;
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.strokeRect(rx, ry, rw, rh);
+      const label = det.class + " " + (det.confidence * 100).toFixed(0) + "%";
+      ctx.font = "bold 13px Segoe UI, system-ui, sans-serif";
+      const tm = ctx.measureText(label), pad = 4, lh = 18;
+      ctx.fillStyle = color;
+      ctx.fillRect(rx, Math.max(0, ry - lh), tm.width + pad * 2, lh);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(label, rx + pad, Math.max(12, ry - 5));
+    }
+  }
+
+  function renderResults(data) {
+    lastResult = data;
+    const img = new Image();
+    img.onload = () => drawCanvas(img, data.detections, data.image.width, data.image.height);
+    img.src = data.image.data_url;
+    statsBar.classList.add("visible");
+    $("statTotal").textContent = data.summary.total_detections;
+    $("statClasses").textContent = data.summary.unique_classes;
+    $("statConf").textContent = (data.summary.avg_confidence * 100).toFixed(1) + "%";
+    $("statTime").textContent = data.inference_ms.toLocaleString();
+    jobMeta.textContent = "job: " + data.job_id + " \u00b7 model: " + data.model + " \u00b7 " + data.image.width + "\u00d7" + data.image.height + "px";
+    jobMeta.classList.remove("hidden");
+    renderChart(data.summary.class_counts);
+    renderTable(data.detections);
+    resultsGrid.style.display = "";
+    chartCard.classList.add("visible");
+  }
+
+  function renderChart(classCounts) {
+    chartBody.innerHTML = "";
+    const entries = Object.entries(classCounts).sort((a, b) => b[1] - a[1]);
+    if (!entries.length) {
+      chartBody.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">No detections found.</p>';
+      return;
+    }
+    const max = Math.max(...entries.map(([, v]) => v));
+    for (const [cls, count] of entries) {
+      const color = colorFromClass(cls), pct = (count / max) * 100;
+      const row = document.createElement("div");
+      row.className = "bar-row";
+      row.innerHTML = '<div class="bar-label" title="' + cls + '">' + cls + '</div>'
+        + '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + color + ';"></div></div>'
+        + '<div class="bar-count">' + count + '</div>';
+      chartBody.appendChild(row);
+    }
+  }
+
+  function renderTable(detections) {
+    detectionsBody.innerHTML = "";
+    if (!detections.length) {
+      detectionsBody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:1.5rem;">No objects detected. Try lowering the confidence threshold.</td></tr>';
+      return;
+    }
+    for (const det of detections) {
+      const color = colorFromClass(det.class), confPct = (det.confidence * 100).toFixed(1);
+      const tr = document.createElement("tr");
+      tr.innerHTML = '<td><span class="class-badge"><span class="class-dot" style="background:' + color + ';"></span>' + det.class + '</span></td>'
+        + '<td>' + confPct + '%<span class="conf-bar" style="width:' + (det.confidence * 60) + 'px;background:' + color + ';"></span></td>'
+        + '<td>' + det.bbox.width + ' \u00d7 ' + det.bbox.height + '</td>';
+      detectionsBody.appendChild(tr);
+    }
+  }
+
+  btnDetect.addEventListener("click", async () => {
+    if (!selectedFile) return;
+    hideError();
+    loadingOverlay.classList.add("active");
+    btnDetect.disabled = true;
+    const confidence = parseFloat(confSlider.value), iou = parseFloat(iouSlider.value);
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    try {
+      const res = await fetch("/detect?confidence=" + confidence + "&iou=" + iou, { method: "POST", body: formData });
+      if (!res.ok) {
+        let msg = "Server returned " + res.status;
+        try { const err = await res.json(); if (err.detail) msg = typeof err.detail === "string" ? err.detail : JSON.stringify(err.detail); } catch {}
+        throw new Error(msg);
+      }
+      renderResults(await res.json());
+    } catch (err) {
+      if (err.name === "TypeError" || (err.message && err.message.includes("Failed to fetch"))) {
+        showError("Cannot reach the VisionAI server. Make sure it is running at http://127.0.0.1:8000");
+        statusDot.className = "status-dot offline";
+        statusText.textContent = "Server offline";
+      } else {
+        showError(err.message || "Detection failed. Please try again.");
+      }
+    } finally {
+      loadingOverlay.classList.remove("active");
+      btnDetect.disabled = false;
+    }
+  });
+
+  window.addEventListener("resize", () => {
+    if (!lastResult) return;
+    const img = new Image();
+    img.onload = () => drawCanvas(img, lastResult.detections, lastResult.image.width, lastResult.image.height);
+    img.src = lastResult.image.data_url;
+  });
+})();
+</script>
+</body>
+</html>

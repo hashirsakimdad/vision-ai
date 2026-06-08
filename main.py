@@ -9,7 +9,15 @@ from fastapi.responses import JSONResponse, HTMLResponse
 import uvicorn, time, uuid, os, json, base64, io
 from pathlib import Path
 from PIL import Image
+import torch
 from ultralytics import YOLO
+
+AVAILABLE_MODELS = [
+    {"id": "yolov8n", "name": "YOLOv8 Nano", "size_mb": 6, "speed": "fastest"},
+    {"id": "yolov8s", "name": "YOLOv8 Small", "size_mb": 22, "speed": "fast"},
+    {"id": "yolov8m", "name": "YOLOv8 Medium", "size_mb": 52, "speed": "balanced"},
+    {"id": "yolov8x", "name": "YOLOv8 XLarge", "size_mb": 136, "speed": "most accurate"},
+]
 
 app = FastAPI(title="VisionAI API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -24,7 +32,18 @@ print(" Model ready!")
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model": "YOLOv8x", "gpu": True}
+    gpu_available = torch.cuda.is_available()
+    return {
+        "status": "ok",
+        "model": "YOLOv8x",
+        "gpu": gpu_available,
+        "gpu_name": torch.cuda.get_device_name(0) if gpu_available else "CPU",
+    }
+
+
+@app.get("/models")
+async def models():
+    return AVAILABLE_MODELS
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -85,6 +104,11 @@ async def detect(
     b64 = base64.b64encode(contents).decode()
     mime = file.content_type or "image/jpeg"
 
+    annotated = results[0].plot()
+    annotated_buf = io.BytesIO()
+    Image.fromarray(annotated[:, :, ::-1]).save(annotated_buf, format="PNG")
+    annotated_b64 = base64.b64encode(annotated_buf.getvalue()).decode()
+
     response = {
         "job_id": job_id,
         "model": "YOLOv8x",
@@ -93,6 +117,7 @@ async def detect(
             "filename": file.filename, "width": img_w, "height": img_h,
             "data_url": f"data:{mime};base64,{b64}",
         },
+        "annotated_image": f"data:image/png;base64,{annotated_b64}",
         "summary": {
             "total_detections": len(detections),
             "unique_classes": len(class_counts),
